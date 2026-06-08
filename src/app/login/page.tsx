@@ -18,10 +18,15 @@ export default function LoginPage() {
   const [scanning, setScanning] = useState(true);
   const [statusText, setStatusText] = useState("Procurando rosto…");
   const [alert, setAlert] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "warning";
     title: string;
     message: string;
   } | null>(null);
+
+  // Rate limiting state
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockCountdown, setBlockCountdown] = useState(0);
+  const [remainingAttempts, setRemainingAttempts] = useState(5);
 
   // Checar permissão da câmera
   useEffect(() => {
@@ -31,9 +36,28 @@ export default function LoginPage() {
       .catch(() => setHasPermission(false));
   }, []);
 
+  // Countdown do bloqueio
+  useEffect(() => {
+    if (!isBlocked || blockCountdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setBlockCountdown((prev) => {
+        if (prev <= 1) {
+          setIsBlocked(false);
+          setRemainingAttempts(5);
+          setStatusText("Desbloqueado! Escaneando…");
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isBlocked, blockCountdown]);
+
   // Função de auto-scan: captura um frame e envia pro backend
   const scanFrame = useCallback(async () => {
-    if (isAuthenticatingRef.current) return;
+    if (isAuthenticatingRef.current || isBlocked) return;
     if (!webcamRef.current) return;
 
     const imageSrc = webcamRef.current.getScreenshot();
@@ -48,6 +72,24 @@ export default function LoginPage() {
     try {
       const response = await authenticateUser(base64Data);
 
+      // Rate limiting: bloqueado
+      if (response.isBlocked) {
+        setIsBlocked(true);
+        setBlockCountdown(response.blockedSecondsRemaining || 30);
+        setRemainingAttempts(0);
+        setStatusText("Bloqueado por excesso de tentativas");
+        setAlert({
+          type: "warning",
+          title: "⚠️ Acesso bloqueado",
+          message: `Muitas tentativas falhas. Aguarde ${response.blockedSecondsRemaining}s.`,
+        });
+        isAuthenticatingRef.current = false;
+        return;
+      }
+
+      // Atualizar tentativas restantes
+      setRemainingAttempts(response.remainingAttempts);
+
       if (response.success) {
         // Rosto reconhecido! Parar o scan
         setResult(response);
@@ -55,11 +97,15 @@ export default function LoginPage() {
         setAlert({
           type: "success",
           title: `Bem-vindo(a), ${response.userName}! 🎉`,
-          message: `Acesso autorizado com ${response.confidence.toFixed(1)}% de confiança.`,
+          message: `Acesso autorizado com ${response.confidence.toFixed(1)}% de confiança. Liveness: ${response.livenessScore.toFixed(0)}%`,
         });
       } else {
-        // Não reconhecido, mas detectou rosto — continuar tentando
-        setStatusText("Rosto não reconhecido. Escaneando…");
+        // Não reconhecido
+        if (response.livenessScore < 15) {
+          setStatusText("⚠ Possível fraude detectada");
+        } else {
+          setStatusText("Rosto não reconhecido");
+        }
       }
     } catch {
       // Erro (ex: nenhum rosto detectado) — continuar tentando
@@ -67,11 +113,11 @@ export default function LoginPage() {
     } finally {
       isAuthenticatingRef.current = false;
     }
-  }, []);
+  }, [isBlocked]);
 
   // Iniciar/parar loop de auto-scan
   useEffect(() => {
-    if (scanning && hasPermission) {
+    if (scanning && hasPermission && !isBlocked) {
       // Scan a cada 2.5 segundos
       intervalRef.current = setInterval(scanFrame, 2500);
       return () => {
@@ -80,7 +126,7 @@ export default function LoginPage() {
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
-  }, [scanning, hasPermission, scanFrame]);
+  }, [scanning, hasPermission, scanFrame, isBlocked]);
 
   const tryAgain = () => {
     setResult(null);
@@ -150,6 +196,24 @@ export default function LoginPage() {
                 confidence={result.confidence}
                 success={result.success}
               />
+              {/* Liveness Score */}
+              <div className="liveness-indicator">
+                <span className="liveness-label">Liveness</span>
+                <div className="liveness-bar-container">
+                  <div
+                    className="liveness-bar"
+                    style={{
+                      width: `${result.livenessScore}%`,
+                      backgroundColor: result.livenessScore > 60 ? "var(--color-success)" : result.livenessScore > 35 ? "var(--color-warning)" : "var(--color-error)",
+                    }}
+                  />
+                </div>
+                <span className="liveness-value" style={{
+                  color: result.livenessScore > 60 ? "var(--color-success)" : result.livenessScore > 35 ? "var(--color-warning)" : "var(--color-error)"
+                }}>
+                  {result.livenessScore.toFixed(0)}%
+                </span>
+              </div>
             </div>
           </div>
         )}
@@ -195,15 +259,51 @@ export default function LoginPage() {
                   </div>
 
                   {/* Indicador de scanning */}
-                  <div className="scan-indicator">
-                    <div className="scan-line" />
-                  </div>
+                  {!isBlocked && (
+                    <div className="scan-indicator">
+                      <div className="scan-line" />
+                    </div>
+                  )}
+
+                  {/* Overlay de bloqueio */}
+                  {isBlocked && (
+                    <div className="fv-blocked-overlay">
+                      <div className="fv-blocked-timer">
+                        <span className="fv-blocked-icon">🔒</span>
+                        <span className="fv-blocked-count">{blockCountdown}s</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="scan-status">
-                  <div className="scan-pulse" />
-                  <span>{statusText}</span>
+                  {isBlocked ? (
+                    <>
+                      <div className="scan-pulse-blocked" />
+                      <span>Bloqueado — aguarde {blockCountdown}s</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="scan-pulse" />
+                      <span>{statusText}</span>
+                    </>
+                  )}
                 </div>
+
+                {/* Indicador de tentativas restantes */}
+                {!isBlocked && remainingAttempts < 5 && (
+                  <div className="attempts-indicator">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`attempt-dot ${i < remainingAttempts ? "attempt-dot-active" : "attempt-dot-used"}`}
+                      />
+                    ))}
+                    <span className="attempts-text">
+                      {remainingAttempts} tentativa{remainingAttempts !== 1 ? "s" : ""} restante{remainingAttempts !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 

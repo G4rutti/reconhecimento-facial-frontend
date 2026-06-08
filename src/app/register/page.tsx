@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
-import CameraCapture from "@/components/CameraCapture";
+import Webcam from "react-webcam";
 import Alert from "@/components/Alert";
 import Loader from "@/components/Loader";
 import { registerUser } from "@/services/api";
 
 export default function RegisterPage() {
+  const webcamRef = useRef<Webcam>(null);
   const [name, setName] = useState("");
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -17,9 +18,17 @@ export default function RegisterPage() {
     message: string;
   } | null>(null);
 
-  const handleCapture = (imageBase64: string) => {
-    setCapturedImage(imageBase64);
-    setAlert(null);
+  const handleCapture = () => {
+    if (!webcamRef.current) return;
+    const imageSrc = webcamRef.current.getScreenshot();
+    if (imageSrc) {
+      const base64Data = imageSrc.split(",")[1];
+      setCapturedImage(base64Data);
+    }
+  };
+
+  const handleRetake = () => {
+    setCapturedImage(null);
   };
 
   const handleSubmit = async () => {
@@ -35,8 +44,8 @@ export default function RegisterPage() {
     if (!capturedImage) {
       setAlert({
         type: "error",
-        title: "Foto necessária",
-        message: "Capture uma foto do seu rosto antes de cadastrar.",
+        title: "Foto obrigatória",
+        message: "Por favor, tire uma foto do seu rosto antes de cadastrar.",
       });
       return;
     }
@@ -45,7 +54,7 @@ export default function RegisterPage() {
     setAlert(null);
 
     try {
-      const result = await registerUser(name.trim(), capturedImage);
+      const result = await registerUser(name.trim(), [capturedImage]);
       setAlert({
         type: "success",
         title: "Cadastro realizado! 🎉",
@@ -65,9 +74,6 @@ export default function RegisterPage() {
       setIsLoading(false);
     }
   };
-
-  // Progresso dos passos
-  const step = !name.trim() ? 1 : !capturedImage ? 2 : 3;
 
   return (
     <main className="page-container">
@@ -93,26 +99,8 @@ export default function RegisterPage() {
             Cadastro Facial
           </h1>
           <p className="page-description">
-            Registre seu rosto para acessar o sistema
+            Registre seu rosto de forma rápida e segura
           </p>
-        </div>
-
-        {/* Step Indicator */}
-        <div className="steps-container animate-enter delay-1">
-          <div className={`step ${step >= 1 ? "step-active" : ""} ${step > 1 ? "step-done" : ""}`}>
-            <div className="step-number">{step > 1 ? "✓" : "1"}</div>
-            <span className="step-label">Nome</span>
-          </div>
-          <div className="step-line" />
-          <div className={`step ${step >= 2 ? "step-active" : ""} ${step > 2 ? "step-done" : ""}`}>
-            <div className="step-number">{step > 2 ? "✓" : "2"}</div>
-            <span className="step-label">Foto</span>
-          </div>
-          <div className="step-line" />
-          <div className={`step ${step >= 3 ? "step-active" : ""}`}>
-            <div className="step-number">3</div>
-            <span className="step-label">Enviar</span>
-          </div>
         </div>
 
         {/* Alertas */}
@@ -167,8 +155,54 @@ export default function RegisterPage() {
 
           {/* Câmera */}
           <div className="form-group">
-            <label className="form-label">Captura Facial</label>
-            <CameraCapture onCapture={handleCapture} isLoading={isLoading} />
+            <label className="form-label">Foto do Rosto</label>
+            <div className="camera-container">
+              <div className="camera-preview">
+                {capturedImage ? (
+                  <img
+                    src={`data:image/jpeg;base64,${capturedImage}`}
+                    alt="Foto capturada"
+                    className="camera-image"
+                  />
+                ) : (
+                  <Webcam
+                    ref={webcamRef}
+                    audio={false}
+                    screenshotFormat="image/jpeg"
+                    screenshotQuality={0.92}
+                    videoConstraints={{
+                      width: 640,
+                      height: 480,
+                      facingMode: "user",
+                    }}
+                    className="camera-video"
+                    mirrored
+                  />
+                )}
+              </div>
+
+              <div className="camera-actions">
+                {capturedImage ? (
+                  <button
+                    type="button"
+                    onClick={handleRetake}
+                    className="btn btn-secondary btn-full"
+                    disabled={isLoading}
+                  >
+                    🔄 Tirar outra foto
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleCapture}
+                    className="btn btn-accent btn-full"
+                    disabled={isLoading}
+                  >
+                    📸 Capturar Foto
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Botão Cadastrar */}
@@ -180,12 +214,12 @@ export default function RegisterPage() {
             {isLoading ? (
               <>
                 <div className="btn-spinner" />
-                Processando...
+                Cadastrando...
               </>
             ) : (
               <>
                 <span className="btn-icon">✓</span>
-                Cadastrar
+                Cadastrar Rosto
               </>
             )}
           </button>

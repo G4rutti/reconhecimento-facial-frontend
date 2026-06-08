@@ -212,6 +212,10 @@ export default function Home() {
             <span className="btn-icon">🔐</span>
             Autenticar
           </Link>
+          <Link href="/dashboard" className="btn btn-secondary btn-lg">
+            <span className="btn-icon">📊</span>
+            Dashboard
+          </Link>
         </div>
 
         {/* Divider */}
@@ -224,20 +228,20 @@ export default function Home() {
         <div className="hero-features animate-enter delay-5">
           <div className="feature-card">
             <div className="feature-icon-wrapper">
-              <span className="feature-icon">🧠</span>
+              <span className="feature-icon">📸</span>
             </div>
             <div className="feature-text">
-              <h3>IA Local</h3>
-              <p>Processamento 100% offline com DlibDotNet + OpenCV</p>
+              <h3>Multi-Ângulo</h3>
+              <p>Cadastro com 3 fotos para máxima precisão de reconhecimento</p>
             </div>
           </div>
           <div className="feature-card">
             <div className="feature-icon-wrapper">
-              <span className="feature-icon">⚡</span>
+              <span className="feature-icon">🛡️</span>
             </div>
             <div className="feature-text">
-              <h3>Ultra Rápido</h3>
-              <p>Autenticação em menos de 1 segundo via embedding 128D</p>
+              <h3>Anti-Spoofing</h3>
+              <p>Detecção de fraude por análise de textura LBP em tempo real</p>
             </div>
           </div>
           <div className="feature-card">
@@ -245,8 +249,8 @@ export default function Home() {
               <span className="feature-icon">🔒</span>
             </div>
             <div className="feature-text">
-              <h3>Privacidade Total</h3>
-              <p>Nenhum dado enviado para nuvem — tudo fica no seu servidor</p>
+              <h3>Rate Limiting</h3>
+              <p>Bloqueio automático após tentativas falhas consecutivas</p>
             </div>
           </div>
         </div>
